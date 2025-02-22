@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   HttpStatus,
   Injectable,
   InternalServerErrorException,
@@ -9,6 +10,7 @@ import {
 import { SignupDto } from './dtos/signup.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { User, UserType } from '../user/entities/user.schema';
+import { Role } from '../roles/schemas/role.schema';
 import mongoose, { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dtos/login.dto';
@@ -20,6 +22,7 @@ import { ResetToken } from './schemas/reset-token.schema';
 import { MailService } from 'src/services/mail.service';
 import { RolesService } from 'src/roles/roles.service';
 import { UserResponse } from '../user/interfaces/user-response.interface';
+import { Permission } from 'src/roles/dtos/role.dto';
 
 @Injectable()
 export class AuthService {
@@ -29,39 +32,51 @@ export class AuthService {
     private RefreshTokenModel: Model<RefreshToken>,
     @InjectModel(ResetToken.name)
     private ResetTokenModel: Model<ResetToken>,
+    @InjectModel(Role.name)
+    private RoleModel: Model<Role>,
     private jwtService: JwtService,
     private mailService: MailService,
     private rolesService: RolesService,
   ) {}
 
   async signup(signupData: SignupDto) {
-    const { email, password, name,roleId } = signupData;
-  
+    const { email, password, name, roleId } = signupData;
+
     // Check if email is in use
     const emailInUse = await this.UserModel.findOne({ email });
     if (emailInUse) {
       throw new BadRequestException('Email already in use');
     }
-  
+
+    // Validate roleId
+    const roleIdStr: string = roleId.toString();
+    if (!mongoose.Types.ObjectId.isValid(roleIdStr)) {
+      throw new BadRequestException('Invalid roleId');
+    }
+
+    const role = await this.RoleModel.findById(roleIdStr);
+    if (!role) {
+      throw new BadRequestException('Role not found');
+    }
+
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
-  
+
     // Create user document and save in MongoDB
     const createdUser = await this.UserModel.create({
-      roleId,
+      roleId: roleIdStr,
       name,
       email,
       password: hashedPassword,
     });
-  
+
     // Return the response with statusCode and user information
     return {
       statusCode: HttpStatus.OK,
       data: createdUser,
     };
   }
-
-
+  
   async login(credentials: LoginDto) {
     const { email, password } = credentials;
   
@@ -189,12 +204,17 @@ export class AuthService {
     );
   }
 
-  async getUserPermissions(userId: string) {
-    const user = await this.UserModel.findById(userId);
+  async getUserPermissions(userId: string): Promise<Permission[]> {
+    const user = await this.UserModel.findById(userId).populate('roleId').exec();
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
 
-    if (!user) throw new BadRequestException();
+    const role = await this.RoleModel.findById(user.roleId).exec();
+    if (!role) {
+      throw new ForbiddenException('Role not found');
+    }
 
-    const role = await this.rolesService.getRoleById(user.roleId.toString());
     return role.permissions;
   }
   async findById(userId: string): Promise<UserResponse> {

@@ -13,8 +13,8 @@ import { Permission } from 'src/roles/dtos/role.dto';
 @Injectable()
 export class AuthorizationGuard implements CanActivate {
   constructor(private reflector: Reflector, private authService: AuthService) {}
-  async canActivate(context: ExecutionContext): Promise<boolean> {
 
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
 
     if (!request.userId) {
@@ -28,11 +28,11 @@ export class AuthorizationGuard implements CanActivate {
     console.log(` the route permissions are ${routePermissions}`);
 
     if (!routePermissions) {
-        return true;
+      return true;
     }
 
     try {
-      const userPermissions = await this.authService.getUserPermissions(
+      const userPermissions: Permission[] = await this.authService.getUserPermissions(
         request.userId,
       );
 

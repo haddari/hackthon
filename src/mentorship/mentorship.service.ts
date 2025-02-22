@@ -5,6 +5,7 @@ import { Mentorship, MentorshipStatus } from './schemas/mentorship.schema';
 import { CareerAdvice } from './schemas/career-advice.schema';
 import { AuthService } from '../auth/auth.service';
 import { GeminiAIService } from '../ai/gemini.service';
+import * as mongoose from 'mongoose';
 
 @Injectable()
 export class MentorshipService {
@@ -16,6 +17,10 @@ export class MentorshipService {
   ) {}
 
   async createMentorshipRequest(studentId: string, alumniId: string, goals: string) {
+    if (!mongoose.Types.ObjectId.isValid(studentId) || !mongoose.Types.ObjectId.isValid(alumniId)) {
+      throw new BadRequestException('Invalid user ID format');
+    }
+
     const student = await this.authService.findById(studentId);
     const alumni = await this.authService.findById(alumniId);
 
@@ -60,7 +65,7 @@ export class MentorshipService {
 
     // Get all alumni users
     const alumni = await this.authService.findAlumni();
-    
+
     // Use Gemini AI to analyze matches
     const matches = await Promise.all(
       alumni.map(async (alumnus) => {
